@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Long Exposure Webcam</title>
+  <style>
+    video, canvas {
+      display: block;
+      margin: 10px auto;
+      max-width: 100%;
+    }
+    video, canvas {
+      transform: scaleX(-1);
+    }
+    #downloadLink {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div>
+    <video id="webcam" autoplay></video>
+    <canvas id="output"></canvas>
+    <input type="number" id="exposureTime" placeholder="Exposure (seconds)" />
+    <button id="startCapture">Start</button>
+    <a id="downloadLink" download="long_exposure.png">Download</a>
+  </div>
+  <script>
+    const video = document.getElementById('webcam');
+    const canvas = document.getElementById('output');
+    const ctx = canvas.getContext('2d');
+    const startButton = document.getElementById('startCapture');
+    const downloadLink = document.getElementById('downloadLink');
+    const exposureInput = document.getElementById('exposureTime');
+
+    navigator.mediaDevices.getUserMedia({ video: true })
+      .then(stream => {
+        video.srcObject = stream;
+        video.play();
+      });
+
+    startButton.addEventListener('click', () => {
+      const duration = parseInt(exposureInput.value, 10) || 5; // default to 5 seconds
+      const startTime = Date.now();
+
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+
+      const captureFrames = () => {
+        const frame = document.createElement('canvas');
+        frame.width = canvas.width;
+        frame.height = canvas.height;
+        const frameCtx = frame.getContext('2d');
+
+        frameCtx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        // Get image data from the current frame
+        const frameData = frameCtx.getImageData(0, 0, canvas.width, canvas.height);
+        const outputData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+        // Blend each pixel
+        for (let i = 0; i < frameData.data.length; i += 4) {
+          const r = frameData.data[i];
+          const g = frameData.data[i + 1];
+          const b = frameData.data[i + 2];
+
+          // Add only brighter pixels
+          outputData.data[i] = Math.max(outputData.data[i], r);
+          outputData.data[i + 1] = Math.max(outputData.data[i + 1], g);
+          outputData.data[i + 2] = Math.max(outputData.data[i + 2], b);
+          outputData.data[i + 3] = 255; // Keep alpha opaque
+        }
+
+        // Put blended data back to the canvas
+        ctx.putImageData(outputData, 0, 0);
+
+        if (Date.now() - startTime < duration * 1000) {
+          requestAnimationFrame(captureFrames);
+        } else {
+          // Flip the canvas horizontally for the final image
+          const finalCanvas = document.createElement('canvas');
+          finalCanvas.width = canvas.width;
+          finalCanvas.height = canvas.height;
+          const finalCtx = finalCanvas.getContext('2d');
+
+          finalCtx.translate(canvas.width, 0); // Move origin to the right
+          finalCtx.scale(-1, 1);               // Flip horizontally
+          finalCtx.drawImage(canvas, 0, 0);    // Draw the flipped image
+
+          downloadLink.href = finalCanvas.toDataURL();
+          downloadLink.style.display = 'block';
+        }
+      };
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      captureFrames();
+    });
+  </script>
+</body>
+</html>
