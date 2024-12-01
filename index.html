@@ -5,47 +5,130 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Long Exposure Webcam</title>
   <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      text-align: center;
+      background-color: #f4f4f9;
+      color: #333;
+    }
+    h1 {
+      margin: 20px 0;
+    }
+    p {
+      margin: 10px 20px;
+    }
     video, canvas {
       display: block;
-      margin: 10px auto;
-      max-width: 100%;
+      margin: 20px auto;
+      max-width: 90%;
+      border-radius: 8px;
       border: 1px solid #ccc;
     }
     video, canvas {
       transform: scaleX(-1); /* Mirror effect */
     }
     #controls {
-      text-align: center;
-      margin-top: 10px;
+      margin: 20px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 10px;
+    }
+    #cameraSelector, #exposureTime, #startCapture {
+      padding: 10px;
+      font-size: 16px;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+    }
+    #startCapture {
+      background-color: #007bff;
+      color: white;
+      cursor: pointer;
+    }
+    #startCapture:hover {
+      background-color: #0056b3;
     }
     #downloadLink {
       display: none;
       margin-top: 10px;
+      text-decoration: none;
+      padding: 10px 15px;
+      background-color: #28a745;
+      color: white;
+      border-radius: 5px;
+    }
+    #downloadLink:hover {
+      background-color: #1e7e34;
+    }
+    #countdown {
+      font-size: 18px;
+      margin-left: 10px;
+    }
+    #progressContainer {
+      width: 90%;
+      max-width: 600px;
+      height: 8px;
+      background-color: #ddd;
+      margin: 10px auto;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    #progressBar {
+      height: 100%;
+      width: 0;
+      background-color: #007bff;
+      transition: width 0.1s linear;
     }
   </style>
 </head>
 <body>
+  <h1>Long Exposure</h1>
+  <p>Use this webpage to take long exposure photos - it's fun!</p>
+  <p>Set the exposure time in the box below, click Start, and then download your creation when you finish.</p>
   <div>
     <video id="webcam" autoplay playsinline></video>
     <canvas id="output"></canvas>
+    <div id="progressContainer">
+      <div id="progressBar"></div>
+    </div>
     <div id="controls">
+      <select id="cameraSelector">
+        <option value="environment">Back Camera</option>
+        <option value="user">Front Camera</option>
+      </select>
       <input type="number" id="exposureTime" placeholder="Exposure (seconds)" />
       <button id="startCapture">Start</button>
-      <a id="downloadLink" download="long_exposure.png">Download</a>
+      <span id="countdown"></span>
+      <a id="downloadLink" download="long_exposure.png">Download Image</a>
     </div>
   </div>
   <script>
     const video = document.getElementById('webcam');
     const canvas = document.getElementById('output');
     const ctx = canvas.getContext('2d');
+    const cameraSelector = document.getElementById('cameraSelector');
     const startButton = document.getElementById('startCapture');
     const downloadLink = document.getElementById('downloadLink');
     const exposureInput = document.getElementById('exposureTime');
+    const countdownDisplay = document.getElementById('countdown');
+    const progressBar = document.getElementById('progressBar');
+    let currentStream;
 
-    // Request webcam access
-    const initializeWebcam = async () => {
+    // Function to stop the current stream
+    const stopStream = () => {
+      if (currentStream) {
+        currentStream.getTracks().forEach(track => track.stop());
+      }
+    };
+
+    // Function to initialize the webcam
+    const initializeWebcam = async (facingMode = 'environment') => {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+        stopStream();
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode } });
+        currentStream = stream;
         video.srcObject = stream;
         video.play();
       } catch (error) {
@@ -62,7 +145,23 @@
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
 
+      countdownDisplay.textContent = `${duration}s`;
+      progressBar.style.width = '0';
+
       const captureFrames = () => {
+        const elapsed = (Date.now() - startTime) / 1000;
+        const remaining = Math.max(0, duration - elapsed).toFixed(1);
+
+        // Update countdown and progress bar
+        countdownDisplay.textContent = `${remaining}s`;
+        progressBar.style.width = `${(elapsed / duration) * 100}%`;
+
+        if (remaining <= 0) {
+          finalizeImage();
+          return;
+        }
+
+        // Capture frame logic
         const frame = document.createElement('canvas');
         frame.width = canvas.width;
         frame.height = canvas.height;
@@ -70,50 +169,50 @@
 
         frameCtx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-        // Get image data from the current frame
         const frameData = frameCtx.getImageData(0, 0, canvas.width, canvas.height);
         const outputData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
-        // Blend each pixel
         for (let i = 0; i < frameData.data.length; i += 4) {
-          const r = frameData.data[i];
-          const g = frameData.data[i + 1];
-          const b = frameData.data[i + 2];
-
-          // Add only brighter pixels
-          outputData.data[i] = Math.max(outputData.data[i], r);
-          outputData.data[i + 1] = Math.max(outputData.data[i + 1], g);
-          outputData.data[i + 2] = Math.max(outputData.data[i + 2], b);
-          outputData.data[i + 3] = 255; // Keep alpha opaque
+          outputData.data[i] = Math.max(outputData.data[i], frameData.data[i]);
+          outputData.data[i + 1] = Math.max(outputData.data[i + 1], frameData.data[i + 1]);
+          outputData.data[i + 2] = Math.max(outputData.data[i + 2], frameData.data[i + 2]);
+          outputData.data[i + 3] = 255; // Opaque
         }
 
-        // Put blended data back to the canvas
         ctx.putImageData(outputData, 0, 0);
+        requestAnimationFrame(captureFrames);
+      };
 
-        if (Date.now() - startTime < duration * 1000) {
-          requestAnimationFrame(captureFrames);
-        } else {
-          // Flip the canvas horizontally for the final image
-          const finalCanvas = document.createElement('canvas');
-          finalCanvas.width = canvas.width;
-          finalCanvas.height = canvas.height;
-          const finalCtx = finalCanvas.getContext('2d');
+      const finalizeImage = () => {
+        countdownDisplay.textContent = '';
+        progressBar.style.width = '100%';
 
-          finalCtx.translate(canvas.width, 0); // Move origin to the right
-          finalCtx.scale(-1, 1);               // Flip horizontally
-          finalCtx.drawImage(canvas, 0, 0);    // Draw the flipped image
+        // Flip horizontally for final image
+        const finalCanvas = document.createElement('canvas');
+        finalCanvas.width = canvas.width;
+        finalCanvas.height = canvas.height;
+        const finalCtx = finalCanvas.getContext('2d');
 
-          downloadLink.href = finalCanvas.toDataURL();
-          downloadLink.style.display = 'block';
-        }
+        finalCtx.translate(canvas.width, 0);
+        finalCtx.scale(-1, 1);
+        finalCtx.drawImage(canvas, 0, 0);
+
+        downloadLink.href = finalCanvas.toDataURL();
+        downloadLink.style.display = 'block';
       };
 
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       captureFrames();
     };
 
-    // Initialize the app
+    // Initialize with default camera
     initializeWebcam();
+
+    // Handle camera selection
+    cameraSelector.addEventListener('change', () => {
+      const facingMode = cameraSelector.value;
+      initializeWebcam(facingMode);
+    });
 
     // Attach event listeners
     startButton.addEventListener('click', startCapture);
