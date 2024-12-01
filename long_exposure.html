@@ -9,22 +9,30 @@
       display: block;
       margin: 10px auto;
       max-width: 100%;
+      border: 1px solid #ccc;
     }
     video, canvas {
-      transform: scaleX(-1);
+      transform: scaleX(-1); /* Mirror effect */
+    }
+    #controls {
+      text-align: center;
+      margin-top: 10px;
     }
     #downloadLink {
       display: none;
+      margin-top: 10px;
     }
   </style>
 </head>
 <body>
   <div>
-    <video id="webcam" autoplay></video>
+    <video id="webcam" autoplay playsinline></video>
     <canvas id="output"></canvas>
-    <input type="number" id="exposureTime" placeholder="Exposure (seconds)" />
-    <button id="startCapture">Start</button>
-    <a id="downloadLink" download="long_exposure.png">Download</a>
+    <div id="controls">
+      <input type="number" id="exposureTime" placeholder="Exposure (seconds)" />
+      <button id="startCapture">Start</button>
+      <a id="downloadLink" download="long_exposure.png">Download</a>
+    </div>
   </div>
   <script>
     const video = document.getElementById('webcam');
@@ -34,14 +42,21 @@
     const downloadLink = document.getElementById('downloadLink');
     const exposureInput = document.getElementById('exposureTime');
 
-    navigator.mediaDevices.getUserMedia({ video: true })
-      .then(stream => {
+    // Request webcam access
+    const initializeWebcam = async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
         video.srcObject = stream;
         video.play();
-      });
+      } catch (error) {
+        alert('Unable to access the camera. Please check permissions.');
+        console.error('Camera initialization error:', error);
+      }
+    };
 
-    startButton.addEventListener('click', () => {
-      const duration = parseInt(exposureInput.value, 10) || 5; // default to 5 seconds
+    // Start capturing frames
+    const startCapture = () => {
+      const duration = parseInt(exposureInput.value, 10) || 5; // Default to 5 seconds
       const startTime = Date.now();
 
       canvas.width = video.videoWidth;
@@ -95,7 +110,13 @@
 
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       captureFrames();
-    });
+    };
+
+    // Initialize the app
+    initializeWebcam();
+
+    // Attach event listeners
+    startButton.addEventListener('click', startCapture);
   </script>
 </body>
 </html>
