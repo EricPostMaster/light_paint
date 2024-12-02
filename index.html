@@ -165,6 +165,8 @@
       countdownDisplay.textContent = `${duration}s`;
       progressBar.style.width = '0';
 
+      const outputData = ctx.createImageData(canvas.width, canvas.height);
+
       const captureFrames = () => {
         const elapsed = (Date.now() - startTime) / 1000;
         const remaining = Math.max(0, duration - elapsed).toFixed(1);
@@ -172,25 +174,45 @@
         countdownDisplay.textContent = `${remaining}s`;
         progressBar.style.width = `${(elapsed / duration) * 100}%`;
 
+        const frame = document.createElement('canvas');
+        frame.width = canvas.width;
+        frame.height = canvas.height;
+        const frameCtx = frame.getContext('2d');
+        frameCtx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const frameData = frameCtx.getImageData(0, 0, canvas.width, canvas.height);
+
+        for (let i = 0; i < frameData.data.length; i += 4) {
+          outputData.data[i] = Math.max(outputData.data[i], frameData.data[i]);
+          outputData.data[i + 1] = Math.max(outputData.data[i + 1], frameData.data[i + 1]);
+          outputData.data[i + 2] = Math.max(outputData.data[i + 2], frameData.data[i + 2]);
+          outputData.data[i + 3] = 255; // Opaque
+        }
+        ctx.putImageData(outputData, 0, 0);
+
+        gif.addFrame(canvas, { delay: 100 });
+
         if (remaining <= 0) {
           finalizeImage();
           return;
         }
 
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        gif.addFrame(canvas, { delay: 100 });
         requestAnimationFrame(captureFrames);
       };
 
       const finalizeImage = () => {
         countdownDisplay.textContent = '';
         progressBar.style.width = '100%';
+
         gif.on('finished', (blob) => {
           const gifURL = URL.createObjectURL(blob);
           downloadGif.href = gifURL;
           downloadGif.style.display = 'block';
         });
         gif.render();
+
+        const imageURL = canvas.toDataURL('image/png');
+        downloadLink.href = imageURL;
+        downloadLink.style.display = 'block';
 
         mediaRecorder.stop();
       };
