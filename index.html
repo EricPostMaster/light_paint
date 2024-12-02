@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Long Exposure Webcam</title>
   <style>
+    /* Same styles as before, with some minor updates for new buttons */
     body {
       font-family: Arial, sans-serif;
       margin: 0;
@@ -35,6 +36,7 @@
       justify-content: center;
       align-items: center;
       gap: 10px;
+      flex-wrap: wrap;
     }
     #cameraSelector, #exposureTime, #startCapture {
       padding: 10px;
@@ -50,7 +52,7 @@
     #startCapture:hover {
       background-color: #0056b3;
     }
-    #downloadLink {
+    #downloadLink, #downloadGif, #downloadVideo {
       display: none;
       margin-top: 10px;
       text-decoration: none;
@@ -59,34 +61,14 @@
       color: white;
       border-radius: 5px;
     }
-    #downloadLink:hover {
+    #downloadGif:hover, #downloadVideo:hover, #downloadLink:hover {
       background-color: #1e7e34;
-    }
-    #countdown {
-      font-size: 18px;
-      margin-left: 10px;
-    }
-    #progressContainer {
-      width: 90%;
-      max-width: 600px;
-      height: 8px;
-      background-color: #ddd;
-      margin: 10px auto;
-      border-radius: 4px;
-      overflow: hidden;
-    }
-    #progressBar {
-      height: 100%;
-      width: 0;
-      background-color: #007bff;
-      transition: width 0.1s linear;
     }
   </style>
 </head>
 <body>
   <h1>Long Exposure</h1>
   <p>Use this webpage to take long exposure photos - it's fun!</p>
-  <p>Set the exposure time in the box below, click Start, and then download your creation when you finish.</p>
   <div>
     <video id="webcam" autoplay playsinline></video>
     <canvas id="output"></canvas>
@@ -102,8 +84,11 @@
       <button id="startCapture">Start</button>
       <span id="countdown"></span>
       <a id="downloadLink" download="long_exposure.png">Download Image</a>
+      <a id="downloadGif" download="long_exposure.gif">Download GIF</a>
+      <a id="downloadVideo" download="long_exposure.webm">Download Video</a>
     </div>
   </div>
+  <script src="https://cdn.jsdelivr.net/npm/gif.js/dist/gif.js"></script>
   <script>
     const video = document.getElementById('webcam');
     const canvas = document.getElementById('output');
@@ -111,19 +96,23 @@
     const cameraSelector = document.getElementById('cameraSelector');
     const startButton = document.getElementById('startCapture');
     const downloadLink = document.getElementById('downloadLink');
+    const downloadGif = document.getElementById('downloadGif');
+    const downloadVideo = document.getElementById('downloadVideo');
     const exposureInput = document.getElementById('exposureTime');
     const countdownDisplay = document.getElementById('countdown');
     const progressBar = document.getElementById('progressBar');
     let currentStream;
 
-    // Function to stop the current stream
+    let gif;
+    let mediaRecorder;
+    let recordedChunks = [];
+
     const stopStream = () => {
       if (currentStream) {
         currentStream.getTracks().forEach(track => track.stop());
       }
     };
 
-    // Function to initialize the webcam
     const initializeWebcam = async (facingMode = 'environment') => {
       try {
         stopStream();
@@ -137,13 +126,30 @@
       }
     };
 
-    // Start capturing frames
     const startCapture = () => {
       const duration = parseInt(exposureInput.value, 10) || 5; // Default to 5 seconds
       const startTime = Date.now();
 
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
+
+      gif = new GIF({ workers: 2, quality: 10 });
+      recordedChunks = [];
+
+      const options = { mimeType: 'video/webm; codecs=vp9' };
+      mediaRecorder = new MediaRecorder(currentStream, options);
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          recordedChunks.push(e.data);
+        }
+      };
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(recordedChunks, { type: 'video/webm' });
+        const videoURL = URL.createObjectURL(blob);
+        downloadVideo.href = videoURL;
+        downloadVideo.style.display = 'block';
+      };
+      mediaRecorder.start();
 
       countdownDisplay.textContent = `${duration}s`;
       progressBar.style.width = '0';
@@ -152,7 +158,6 @@
         const elapsed = (Date.now() - startTime) / 1000;
         const remaining = Math.max(0, duration - elapsed).toFixed(1);
 
-        // Update countdown and progress bar
         countdownDisplay.textContent = `${remaining}s`;
         progressBar.style.width = `${(elapsed / duration) * 100}%`;
 
@@ -161,60 +166,33 @@
           return;
         }
 
-        // Capture frame logic
-        const frame = document.createElement('canvas');
-        frame.width = canvas.width;
-        frame.height = canvas.height;
-        const frameCtx = frame.getContext('2d');
-
-        frameCtx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-        const frameData = frameCtx.getImageData(0, 0, canvas.width, canvas.height);
-        const outputData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-
-        for (let i = 0; i < frameData.data.length; i += 4) {
-          outputData.data[i] = Math.max(outputData.data[i], frameData.data[i]);
-          outputData.data[i + 1] = Math.max(outputData.data[i + 1], frameData.data[i + 1]);
-          outputData.data[i + 2] = Math.max(outputData.data[i + 2], frameData.data[i + 2]);
-          outputData.data[i + 3] = 255; // Opaque
-        }
-
-        ctx.putImageData(outputData, 0, 0);
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        gif.addFrame(canvas, { delay: 100 });
         requestAnimationFrame(captureFrames);
       };
 
       const finalizeImage = () => {
         countdownDisplay.textContent = '';
         progressBar.style.width = '100%';
+        gif.on('finished', (blob) => {
+          const gifURL = URL.createObjectURL(blob);
+          downloadGif.href = gifURL;
+          downloadGif.style.display = 'block';
+        });
+        gif.render();
 
-        // Flip horizontally for final image
-        const finalCanvas = document.createElement('canvas');
-        finalCanvas.width = canvas.width;
-        finalCanvas.height = canvas.height;
-        const finalCtx = finalCanvas.getContext('2d');
-
-        finalCtx.translate(canvas.width, 0);
-        finalCtx.scale(-1, 1);
-        finalCtx.drawImage(canvas, 0, 0);
-
-        downloadLink.href = finalCanvas.toDataURL();
-        downloadLink.style.display = 'block';
+        mediaRecorder.stop();
       };
 
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       captureFrames();
     };
 
-    // Initialize with default camera
     initializeWebcam();
-
-    // Handle camera selection
     cameraSelector.addEventListener('change', () => {
       const facingMode = cameraSelector.value;
       initializeWebcam(facingMode);
     });
-
-    // Attach event listeners
     startButton.addEventListener('click', startCapture);
   </script>
 </body>
