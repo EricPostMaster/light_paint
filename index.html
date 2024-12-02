@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Long Exposure Webcam</title>
   <style>
-    /* Same styles as before, with some minor updates for new buttons */
     body {
       font-family: Arial, sans-serif;
       margin: 0;
@@ -63,6 +62,20 @@
     }
     #downloadGif:hover, #downloadVideo:hover, #downloadLink:hover {
       background-color: #1e7e34;
+    }
+    #progressContainer {
+      margin: 10px auto;
+      width: 90%;
+      height: 5px;
+      background: #ddd;
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    #progressBar {
+      width: 0;
+      height: 100%;
+      background: #007bff;
+      transition: width 0.1s;
     }
   </style>
 </head>
@@ -136,12 +149,10 @@
       gif = new GIF({ workers: 2, quality: 10 });
       recordedChunks = [];
 
-      const options = { mimeType: 'video/webm; codecs=vp9' };
-      mediaRecorder = new MediaRecorder(currentStream, options);
+      const canvasStream = canvas.captureStream(30); // 30 FPS for recording
+      mediaRecorder = new MediaRecorder(canvasStream, { mimeType: 'video/webm; codecs=vp9' });
       mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
-          recordedChunks.push(e.data);
-        }
+        if (e.data.size > 0) recordedChunks.push(e.data);
       };
       mediaRecorder.onstop = () => {
         const blob = new Blob(recordedChunks, { type: 'video/webm' });
