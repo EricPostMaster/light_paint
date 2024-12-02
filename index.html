@@ -26,7 +26,7 @@
       border-radius: 8px;
       border: 1px solid #ccc;
     }
-    video, canvas {
+    video {
       transform: scaleX(-1); /* Mirror effect */
     }
     #controls {
@@ -146,7 +146,6 @@
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
 
-      gif = new GIF({ workers: 2, quality: 10 });
       recordedChunks = [];
 
       const canvasStream = canvas.captureStream(30); // 30 FPS for recording
@@ -178,7 +177,13 @@
         frame.width = canvas.width;
         frame.height = canvas.height;
         const frameCtx = frame.getContext('2d');
-        frameCtx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        // Draw the mirrored video frame
+        frameCtx.save();
+        frameCtx.scale(-1, 1); // Apply mirroring effect
+        frameCtx.drawImage(video, -canvas.width, 0, canvas.width, canvas.height); // Mirror horizontally
+        frameCtx.restore();
+        
         const frameData = frameCtx.getImageData(0, 0, canvas.width, canvas.height);
 
         for (let i = 0; i < frameData.data.length; i += 4) {
@@ -188,8 +193,6 @@
           outputData.data[i + 3] = 255; // Opaque
         }
         ctx.putImageData(outputData, 0, 0);
-
-        gif.addFrame(canvas, { delay: 100 });
 
         if (remaining <= 0) {
           finalizeImage();
@@ -202,13 +205,6 @@
       const finalizeImage = () => {
         countdownDisplay.textContent = '';
         progressBar.style.width = '100%';
-
-        gif.on('finished', (blob) => {
-          const gifURL = URL.createObjectURL(blob);
-          downloadGif.href = gifURL;
-          downloadGif.style.display = 'block';
-        });
-        gif.render();
 
         const imageURL = canvas.toDataURL('image/png');
         downloadLink.href = imageURL;
