@@ -1,3 +1,3 @@
 LightPaint
 
-Try it here: https://ericpostmaster.github.io/long_exposure_webcam/
+Try it here: https://ericpostmaster.github.io/light_paint/
